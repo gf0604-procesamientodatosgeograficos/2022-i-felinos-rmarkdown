@@ -1,2 +1,3 @@
-# 2022-i-felinos-rmarkdown
-Felinos de Costa Rica
+# Felinos de Costa Rica - R Markdown
+
+Este sitio web muestra visualizaciones de registros de presencia de especies silvestres de felinos (familia [*Felidae*](https://es.wikipedia.org/wiki/Felidae)) de Costa Rica en forma de tablas, gráficos estadísticos y mapas. Fue desarrollado como un documento [R Markdown](https://rmarkdown.rstudio.com/), como ejemplo para el curso [GF-0604 Procesamiento de datos geográficos](https://gf0604-procesamientodatosgeograficos.github.io/2022-i/) de la [Escuela de Geografía](https://www.geografia.fcs.ucr.ac.cr/) de la [Universidad de Costa Rica](https://www.ucr.ac.cr/), impartido durante el primer ciclo lectivo de 2022. El código fuente se encuentra en [https://github.com/gf0604-procesamientodatosgeograficos/2022-i-felinos-rmarkdown](https://github.com/gf0604-procesamientodatosgeograficos/2022-i-felinos-rmarkdown).

@@ -1,0 +1,283 @@
+---
+title: "Felinos de Costa Rica - R Markdown"
+author: "Manuel Vargas"
+date: "2022-06-09"
+bibliography: bib/referencias.bib
+csl: bib/apa-6th-edition.csl
+output:
+  html_document:
+    code_folding: hide
+    theme: readable
+    toc: true
+    toc_depth: 5
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introducción
+Este sitio web muestra visualizaciones de registros de presencia de especies silvestres de felinos (familia [*Felidae*](https://es.wikipedia.org/wiki/Felidae)) de Costa Rica en forma de tablas, gráficos estadísticos y mapas. Fue desarrollado como un documento [R Markdown](https://rmarkdown.rstudio.com/), como ejemplo para el curso [GF-0604 Procesamiento de datos geográficos](https://gf0604-procesamientodatosgeograficos.github.io/2022-i/) de la [Escuela de Geografía](https://www.geografia.fcs.ucr.ac.cr/) de la [Universidad de Costa Rica](https://www.ucr.ac.cr/), impartido durante el primer ciclo lectivo de 2022. El código fuente se encuentra en [https://github.com/gf0604-procesamientodatosgeograficos/2022-i-felinos-rmarkdown](https://github.com/gf0604-procesamientodatosgeograficos/2022-i-felinos-rmarkdown).
+
+## Herramientas de desarrollo
+
+### Paquetes de R
+Las visualizaciones fueron desarrolladas en el lenguaje de programación [R](https://www.R-project.org/) [@rcoreteam_r_2021] con paquetes como, entre otros, [dplyr](https://dplyr.tidyverse.org/) [@wickham_dplyr_2021], para manipulación de datos; [ggplot2](https://ggplot2.tidyverse.org/) [@wickham_ggplot2_2016] y [plotly](https://plotly-r.com) [@stevert_plotly_2020], para graficación estadística; [DT](https://rstudio.github.io/DT/) para tablas interactivas [@xie_dt_2021]; [sf](https://r-spatial.github.io/sf/) [@pebesma_sf_2018] para manejo de datos geoespaciales vectoriales; [terra](https://rspatial.org/terra/) [@hijmans_terra_2021] para manejo de datos geoespaciales raster y [leaflet](https://rstudio.github.io/leaflet/) para creación de mapas interactivos [@cheng_leaflet_2021].
+
+```{r carga-paquetes, message=FALSE}
+# Carga de paquetes de R
+
+library(dplyr) # manipulación de datos
+library(ggplot2) # graficación estadística
+library(ggthemes) # estilos para ggplot2 
+library(plotly) # graficación estadística
+library(kableExtra) # tablas complejas
+library(DT) # tablas interactivas
+library(sf) # manejo de datos vectoriales
+library(terra) # manejo de datos raster
+library(raster) # manejo de datos raster
+library(rgdal) # manejo de datos raster
+library(leaflet) # mapas interactivos
+```
+
+## Datos
+Se utilizan tres tipos de datos:
+
+- Registros de presencia de especies.
+- Datos geoespaciales vectoriales.
+- Datos geoespaciales raster.
+
+### Registros de presencia de especies
+Son datos primarios de biodiversidad, provenientes de fuentes como museos de historia natural y aplicaciones de ciencia ciudadana para dispositivos móviles, que proporcionan detalles de un organismo tales como su identificación taxonómica (ej. nombre de la especie), su fecha de recolección u observación, su localización (ej. país, coordenadas geográficas), el nombre de su recolector u observador y el nombre de la organización que resguarda la información. Los datos asociados a la [observación un ave](https://www.gbif.org/occurrence/3344097718), a una [planta depositada en un herbario](http://legacy.tropicos.org/Image/100496765) o a la [fotografía de un mamífero tomada por una cámara trampa](https://www.gbif.org/occurrence/2850700339) son ejemplos de registros de presencia de especies. Los usos de los datos de este tipo son muy variados e incluyen el monitoreo de cambios ambientales, del efecto nocivo de pesticidas, de especies invasivas y de enfermedades infecciosas, entre muchos otros [@ball-damerow_research_2019].
+
+Los registros de presencia que se utilizan en este documento fueron agrupados por la [Infraestructura Mundial de Información en Biodiversidad](https://www.gbif.org/) (GBIF; en inglés, *Global Biodiversity Information Facility*) de acuerdo con el estándar [Darwin Core](https://dwc.tdwg.org/), un glosario de términos orientado a apoyar el intercambio de información sobre diversidad biológica [@wieczorek_darwin_2012]. Para obtener los regisros, se realizó una [consulta](https://doi.org/10.15468/dl.k4uuuy) al portal de datos de GBIF que retornó 173 registros de 13 proveedores de datos [@https://doi.org/10.15468/dl.k4uuuy], los cuales fueron descargados en formato CSV (valores separados por comas; en inglés, *Comma Separated Values*). Los campos de coordenadas contenidos en este archivo se emplearon para crear geometrías de puntos mediante el método [st_read()](https://r-spatial.github.io/sf/reference/st_read.html) de `sf`. Posteriormente, a las geometrías se les asignó el sistema de coordenadas WGS84 (código EPSG = 4326).
+
+```{r lectura-datos-felinos}
+# Lectura de un archivo CSV con registros de presencia de felinos de Costa Rica
+felinos <- # objeto sf de datos vectoriales con geometrías de puntos
+  st_read(
+    "datos/felinos.csv", # archivo de datos de entrada
+    options = c(
+      "X_POSSIBLE_NAMES=decimalLongitude", # columna de longitud decimal
+      "Y_POSSIBLE_NAMES=decimalLatitude"  # columna de latitud decimal
+    ),
+    quiet = TRUE
+  )
+
+# Asignación del sistema de coordenadas WGS84 al objeto felinos
+st_crs(felinos) <- 4326
+```
+
+### Datos geoespaciales vectoriales
+Se utilizan también datos vectoriales con geometrías de multipolígonos correspondientes a las siete provincias de Costa Rica. Estos datos provienen de un geoservicio WFS (en inglés, *Web Feature Service*) publicado por el [Instituto Geográfico Nacional (IGN)](http://www.registronacional.go.cr/instituto_geografico/), desde el que convirtieron a un archivo en formato [GeoJSON](https://geojson.org/), el cual se leyó y cargó en R con el método [st_read()](https://r-spatial.github.io/sf/reference/st_read.html) de `sf`. Luego, las geometrías se transformaron al sistema de coordenadas WGS84 (EPSG = 4326).
+
+```{r lectura-datos-provincias}
+# Lectura de una capa vectorial (GeoJSON) de provincias de Costa Rica
+
+provincias <- # objeto sf de datos vectoriales con geometrías de multipolígonos
+  st_read(
+    "datos/provincias.geojson", # archivo de datos de entrada
+    quiet = TRUE
+  ) %>%
+  st_transform(4326) # transformación al sistema de coordenadas WGS84
+```
+
+### Datos geoespaciales raster
+Por último, se utiliza un archivo raster de altitud de Costa Rica proveniente de [WorldClim](https://www.worldclim.org/), un conjunto de capas climáticas (precipitación, temperatura, radiación solar, etc.) disponibles en varias resoluciones para emplearse en mapas y modelado espacial [@fick_worldclim_2017]. La capa global de altitud de WorldClim se recortó de acuerdo con el contorno de las provincias de Costa Rica y se guardó en un archivo [GeoTIFF](https://es.wikipedia.org/wiki/GeoTIFF), el cual se leyó y cargó en R con el método [rast](https://rdrr.io/pkg/terra/man/rast.html) de `terra`.
+
+```{r lectura-datos-altitud}
+# Lectura de una capa raster (GeoTIFF) de altitud de Costa Rica
+
+altitud <- # objeto tipo SpatRaster
+  rast(
+    "datos/altitud.tif" # archivo de datos de entrada
+  )
+```
+
+# Especies presentes en Costa Rica
+En la [clasificación taxonómica](https://es.wikipedia.org/wiki/Taxonom%C3%ADa), los [felinos](https://es.wikipedia.org/wiki/Felidae) son una familia con nombre científico *Felidae*, perteneciente al orden de los carnívoros (*Carnivora*) y a la clase de los mamíferos (*Mammalia*). Contiene, al menos, 36 especies silvestres. Entre sus similitudes morfológicas pueden mencionarse caras redondas, bigotes, ojos grandes y orejas grandes. Tienen el rango más amplio de tamaños corporales de todas las familias de carnívoros, con pesos que van desde 1 kg hasta 300 kg. Ocupan hábitats muy diversos y su distribución natural cubre todo el planeta, con la excepción de la Antártida y Australia, donde han sido introducidos por el ser humano [@lamberski_felidae_2015].
+
+En Costa Rica hay seis especies de felinos silvestres, cuyas principales características se resumen a continuación:
+
+```{r tabla-especies-felinos}
+# Tabla con información de especies de felinos de Costa Rica
+
+# Data frame con datos
+especies_felinos <-
+  data.frame(
+    nombre_cientifico = c(
+      "Leopardus pardalis",
+      "Leopardus tigrinus",
+      "Leopardus wiedii",
+      "Panthera onca",
+      "Puma concolor",
+      "Puma yagouaroundi"
+    ),
+    url = c(
+      "https://es.wikipedia.org/wiki/Leopardus_pardalis",
+      "https://es.wikipedia.org/wiki/Leopardus_tigrinus",
+      "https://es.wikipedia.org/wiki/Leopardus_wiedii",
+      "https://es.wikipedia.org/wiki/Panthera_onca",
+      "https://es.wikipedia.org/wiki/Puma_concolor",
+      "https://es.wikipedia.org/wiki/Herpailurus_yagouaroundi"
+    ),
+    nombre_comun = c(
+      "Manigordo, ocelote",
+      "Tigrillo",
+      "Caucel",
+      "Jaguar",
+      "Puma",
+      "León breñero, yaguarundí"
+    ),
+    longitud = c("110 cm", "78 cm", "94 cm", "2 m", "1.7 m", "1.25 m"),
+    peso = c("7 - 15 kg", "1.5 - 2.8 kg", "3 - 5 kg", "30 - 100 kg", "24 - 65 kg", "4 - 9 kg"),
+    estado_conservacion = c(
+      "En peligro de extinción",
+      "En peligro de extinción",
+      "En peligro de extinción",
+      "En peligro de extinción",
+      "En peligro de extinción",
+      "En peligro de extinción"
+    ),
+    imagen = ""
+  )
+
+# Se formatea la columna con el URL que navega al artículo de Wikipedia para cada especie
+especies_felinos <-
+  especies_felinos %>%
+  mutate(nombre_cientifico = cell_spec(nombre_cientifico, "html", link = url)) %>%
+  dplyr::select(-url)
+
+# Tabla con formato e imágenes
+especies_felinos %>%
+  kbl(
+    "html",
+    caption = "Especies de felinos de Costa Rica",
+    escape = FALSE,
+    col.names = c(
+      "Nombre científico",
+      "Nombre común",
+      "Longitud (*)",
+      "Peso (*)",
+      "Estado de conservación (**)",
+      "Imagen (***)"
+    )
+  ) %>%
+  kable_paper(full_width = TRUE) %>%
+  row_spec(0, align = "c") %>%
+  column_spec(1, italic = TRUE) %>%
+  column_spec(6, image = spec_image(
+    c(
+      "img/leopardus_pardalis.png",
+      "img/leopardus_tigrinus.png",
+      "img/leopardus_wiedii.png",
+      "img/panthera_onca.png",
+      "img/puma_concolor.png",
+      "img/puma_yagouaroundi.png"
+    ),
+    400,
+    400
+  ))
+```
+
+(\*) Fuente: [Costa Rica Silvestre - Vecinos silvestres - Felinos](https://costaricasilvestre.go.cr/wp-content/uploads/2020/11/ficha-felinos.pdf) [@sinac_costa_2019].  
+(\*\*) Fuente: [R-SINAC-CONAC-092-2017 -  Establece la lista oficial de especies en peligro de extinción y con poblaciones reducidas y amenazadas](http://www.pgrweb.go.cr/scij/Busqueda/Normativa/Normas/nrm_texto_completo.aspx?param1=NRTC&nValor1=1&nValor2=84908&nValor3=109703&strTipM=TC) [@sinac_r-sinac-conac-092-2017_2017].  
+(\*\*\*) Fuente: Imágenes del [Centro de Rescate y Refugio Las Pumas](https://www.centrorescatelaspumas.org/), publicadas en [Costa Rica Silvestre - Vecinos silvestres - Felinos](https://costaricasilvestre.go.cr/wp-content/uploads/2020/11/ficha-felinos.pdf) [@sinac_costa_2019].
+
+# Visualizaciones de datos
+
+## Tablas
+
+### Registros de presencia
+La siguiente tabla muestra la lista de registros de presencia, con un subconjunto de columnas seleccionadas, en una tabla interactiva del paquete `DT`.
+
+```{r tabla-registros-presencia}
+# Tabla interactiva del paquete DT
+
+felinos %>%
+  st_drop_geometry() %>% # se suprime la columna de geometría
+  dplyr::select(species,
+                # selección de columnas
+                eventDate,
+                stateProvince,
+                locality,
+                decimalLongitude,
+                decimalLatitude) %>%
+  datatable(
+    options = list(
+      pageLength = 5,
+      # cantidad de registros en una página
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Spanish.json') # traducción al español
+    ),
+    colnames = c(
+      # encabezados de las columnas
+      "Especie",
+      "Fecha",
+      "Provincia",
+      "Localidad",
+      "Longitud",
+      "Latitud"
+    )
+  )
+```
+
+## Gráficos
+
+### Registros de presencia por especie
+Se muestra la cantidad de registros por especie en un gráfico de barras. Se construye con el paquete `ggplot2` y luego se utiliza la función [ggplotly()](https://rdrr.io/pkg/plotly/man/ggplotly.html) para convertirlo a un gráfico interactivo de `plotly`.
+
+```{r grafico-registros-x-especie}
+# Gráfico de barras de cantidad de registros por especie
+
+# Gráfico ggplot2
+grafico_registros_x_especie <-
+  felinos %>%
+  count(species) %>% # se realiza primero el conteo de registros por especies, para luego facilitar el ordenamiento de las barras
+  ggplot(aes(x = reorder(species, n), y = n)) +
+  geom_bar(stat = "identity") +
+  xlab("Especie") +
+  ylab("Registros de presencia") +
+  coord_flip() + # inversión de ejes
+  theme_hc() # tema del paquete ggthemes
+
+# Gráfico plotly
+grafico_registros_x_especie %>%
+  ggplotly() %>% 
+  config(locale = 'es') # traducción de etiquetas al español
+```
+
+## Mapas
+
+### Registros de presencia
+El siguiente mapa interactivo fue creado con el paquete `leaflet` y muestra la ubicación de los registros de presencia en un mapa que, además, despliega una capa base de [OpenStreetMap (OSM)](https://www.openstreetmap.org/), la capa raster de altitud de Costa Rica y la capa vectorial de polígonos de provincias de Costa Rica.
+
+```{r mapa-registros-presencia, message=FALSE, warning=FALSE}
+# Mapa leaflet básico con capas de altitud, provincias y registros de presencia de felinos
+
+leaflet() %>%
+  addTiles() %>% # capa base de OSM
+  addRasterImage( # capa raster de altitud
+    raster(altitud), # la capa se convierte al formato RasterLayer del paquete raster, para compatibilidad con leaflet
+    opacity = 0.6
+  ) %>%    
+  addPolygons( # capa vectorial de polígonos de provincias
+    data = provincias,
+    color = "black",
+    fillColor = "transparent",
+    stroke = TRUE,
+    weight = 1.0,
+  ) %>%
+  addCircleMarkers( # capa vectorial de puntos de registros de presencia
+    data = felinos,
+    stroke = F,
+    radius = 4,
+    fillColor = 'blue',
+    fillOpacity = 1
+  )
+```
+
+# Bibliografía {-}
+<div id="refs"></div>
